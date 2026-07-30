@@ -1,0 +1,21 @@
+apiVersion: axonhub.looplj.com/v1alpha1
+kind: AxonHub
+metadata:
+  labels:
+    app.kubernetes.io/name: axon-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: axonhub-sample
+spec:
+  image: ghcr.io/looplj/axonhub:latest
+  replicas: 1
+  port: 8090
+  postgres:
+    enabled: true
+    embedded:
+      image: postgres:16
+      database: axonhub
+      user: axonhub
+      storage: 10Gi
+      shmSize: 256Mi
+      maxConnections: 512
+      sharedBuffers: 128MB

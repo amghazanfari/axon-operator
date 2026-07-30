@@ -8,4 +8,14 @@ layout:
 - go.kubebuilder.io/v4
 projectName: axon-operator
 repo: github.com/amghazanfari/axon-operator
+resources:
+- api:
+    crdVersion: v1
+    namespaced: true
+  controller: true
+  domain: axonhub.looplj.com
+  group: axonhub
+  kind: AxonHub
+  path: github.com/amghazanfari/axon-operator/api/v1alpha1
+  version: v1alpha1
 version: "3"

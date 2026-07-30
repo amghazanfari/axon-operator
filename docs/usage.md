@@ -3,9 +3,8 @@
 This document describes how to install, configure, and use the AxonHub
 Operator in a Kubernetes cluster.
 
-> **Status:** The operator is currently in the scaffolding phase. CRD types
-> and controller reconciliation logic will be added in subsequent iterations.
-> Sections marked with _(pending)_ are placeholders for future functionality.
+> **Status:** The `AxonHub` CRD and API types are defined. Controller
+> reconciliation logic is under active development.
 
 ---
 
@@ -19,7 +18,11 @@ Operator in a Kubernetes cluster.
   - [Option 4: Single YAML Bundle](#option-4-single-yaml-bundle)
 - [Configuration](#configuration)
 - [Verifying the Installation](#verifying-the-installation)
-- [Deploying AxonHub Instances _(pending)_](#deploying-axonhub-instances-pending)
+- [Deploying AxonHub Instances](#deploying-axonhub-instances)
+  - [Embedded Postgres (default)]#embedded-postgres-default)
+  - [External Postgres (BYO database)](#external-postgres-byo-database)
+  - [Multiple Instances](#multiple-instances)
+- [AxonHub CRD Reference](#axonhub-crd-reference)
 - [Metrics & Observability](#metrics--observability)
 - [Upgrading](#upgrading)
 - [Uninstalling](#uninstalling)
@@ -139,6 +142,9 @@ The most common options are listed below.
 | `serviceAccount.annotations`        | Annotations for the service account                  | `{}`                                 |
 | `serviceAccount.name`               | Override the service account name                    | `""`                                 |
 
+> **Note:** The operator Helm chart does **not** deploy a Postgres database.
+> Each `AxonHub` CR manages its own database lifecycle (see below).
+
 ### Example: custom values
 
 ```yaml
@@ -190,49 +196,192 @@ Check the operator logs:
 kubectl logs -n axon-operator-system -l control-plane=controller-manager -c manager -f
 ```
 
-Verify RBAC resources were created:
+Verify the CRD is registered:
 
 ```sh
-kubectl get clusterrole | grep axon-operator
-kubectl get clusterrolebinding | grep axon-operator
+kubectl get crd axonhubs.axonhub.looplj.com
 ```
 
 ---
 
-## Deploying AxonHub Instances _(pending)_
+## Deploying AxonHub Instances
 
-> **Note:** The `AxonHub` CRD does not exist yet. This section is a scaffold
-> and will be populated once the API types and controller are implemented.
+The `AxonHub` CR is namespaced — you can create multiple isolated instances
+in different namespaces. Each instance gets its own dedicated Postgres
+database (when using the embedded mode) or connects to an external one.
 
-Once the CRD is available, you will be able to create an AxonHub instance:
+### Embedded Postgres (default)
+
+By default, the operator creates a single-node Postgres StatefulSet
+alongside each AxonHub instance. This is ideal for development, evaluation,
+and small deployments.
 
 ```yaml
-# axonhub-sample.yaml
+# axonhub-embedded.yaml
 apiVersion: axonhub.looplj.com/v1alpha1
 kind: AxonHub
 metadata:
   name: my-axonhub
   namespace: default
 spec:
-  # Image of the AxonHub server to deploy.
   image: ghcr.io/looplj/axonhub:latest
-  # Number of replicas.
   replicas: 1
-  # Service type for exposing the AxonHub API.
-  serviceType: ClusterIP
-  # TODO: add configuration fields (port, resources, env, etc.)
+  port: 8090
+  postgres:
+    enabled: true
+    embedded:
+      image: postgres:16
+      database: axonhub
+      user: axonhub
+      storage: 10Gi
+      shmSize: 256Mi
+      maxConnections: 512
+      sharedBuffers: 128MB
 ```
 
 ```sh
-kubectl apply -f axonhub-sample.yaml
+kubectl apply -f axonhub-embedded.yaml
+```
+
+The operator will:
+1. Create a Postgres StatefulSet + Service + Secret with a generated password
+2. Wait for Postgres to become healthy
+3. Create the AxonHub Deployment with the correct `OCTOPUS_DATABASE_PATH`
+4. Update status conditions as resources become ready
+
+### External Postgres (BYO database)
+
+For production, use a managed Postgres (RDS, CloudSQL, CloudNativePG, etc.)
+by disabling the embedded database and providing connection details.
+
+First, create a secret with the database password:
+
+```sh
+kubectl create secret generic my-pg-secret \
+  --from-literal=password='s3cr3t-p@ss'
+```
+
+Then create the AxonHub CR:
+
+```yaml
+# axonhub-external-db.yaml
+apiVersion: axonhub.looplj.com/v1alpha1
+kind: AxonHub
+metadata:
+  name: my-axonhub
+  namespace: default
+spec:
+  image: ghcr.io/looplj/axonhub:latest
+  replicas: 1
+  port: 8090
+  postgres:
+    enabled: false
+    external:
+      host: pg-ha.prod.svc.cluster.local
+      port: 5432
+      database: axonhub
+      user: axonhub
+      passwordSecretRef:
+        name: my-pg-secret
+        key: password
+      sslMode: require
+```
+
+```sh
+kubectl apply -f axonhub-external-db.yaml
+```
+
+### Multiple Instances
+
+Each `AxonHub` CR is fully isolated. Create multiple instances in the same
+namespace or across namespaces:
+
+```sh
+# Instance A in namespace team-a
+kubectl create namespace team-a
+kubectl apply -n team-a -f axonhub-embedded.yaml
+
+# Instance B in namespace team-b (with external DB)
+kubectl create namespace team-b
+kubectl apply -n team-b -f axonhub-external-db.yaml
+```
+
+```
+namespace: team-a
+  ├── AxonHub CR "my-axonhub"
+  ├── Postgres StatefulSet "my-axonhub-postgres"    ← operator-managed
+  ├── Secret "my-axonhub-db-connection"
+  └── AxonHub Deployment "my-axonhub"
+
+namespace: team-b
+  ├── AxonHub CR "my-axonhub"
+  └── AxonHub Deployment "my-axonhub"               ← connects to external DB
 ```
 
 Check the status:
 
 ```sh
-kubectl get axonhub
-kubectl describe axonhub my-axonhub
+kubectl get axonhub -A
+# or using the short name
+kubectl get ah -A
 ```
+
+```
+NAMESPACE   NAME          READY   REPLICAS   DB READY   AGE
+team-a      my-axonhub    true    1          true       2m
+team-b      my-axonhub    true    1          true       1m
+```
+
+---
+
+## AxonHub CRD Reference
+
+### Spec fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `image` | string | yes | — | AxonHub container image |
+| `replicas` | int32 | no | `1` | Number of AxonHub replicas (1–10) |
+| `port` | int32 | no | `8090` | Container listen port |
+| `postgres` | object | yes | — | Database configuration |
+| `postgres.enabled` | bool | no | `true` | Operator creates a dedicated Postgres |
+| `postgres.embedded` | object | no | — | Embedded Postgres config (when enabled) |
+| `postgres.external` | object | no | — | External Postgres config (when disabled) |
+| `resources` | object | no | — | Compute resources for AxonHub container |
+| `env` | array | no | `[]` | Extra environment variables |
+
+### Embedded Postgres fields
+
+| Field | Type | Default | Description |
+|-------|------|---------|-------------|
+| `image` | string | `postgres:16` | Postgres container image |
+| `database` | string | `axonhub` | Database name |
+| `user` | string | `axonhub` | Postgres user |
+| `passwordSecretRef` | object | _(auto-generated)_ | Secret ref for password |
+| `storage` | string | `10Gi` | PVC size |
+| `shmSize` | string | `256Mi` | Shared memory size |
+| `maxConnections` | int32 | `512` | PostgreSQL `max_connections` |
+| `sharedBuffers` | string | `128MB` | PostgreSQL `shared_buffers` |
+| `resources` | object | — | Compute resources for Postgres container |
+
+### External Postgres fields
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `host` | string | yes | — | Postgres host |
+| `port` | int32 | no | `5432` | Postgres port |
+| `database` | string | no | `axonhub` | Database name |
+| `user` | string | no | `axonhub` | Postgres user |
+| `passwordSecretRef` | object | yes | — | Secret ref containing password |
+| `sslMode` | string | no | `disable` | SSL mode (disable/require/verify-ca/verify-full) |
+
+### Status fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `ready` | bool | AxonHub instance is ready to serve traffic |
+| `databaseReady` | bool | Database is ready (embedded or external) |
+| `conditions` | array | Detailed condition objects with lastTransitionTime, reason, message |
 
 ---
 
@@ -291,7 +440,13 @@ kubectl rollout status deployment/axon-operator-controller-manager \
 
 ## Uninstalling
 
-**Via Helm:**
+**Remove AxonHub instances first:**
+
+```sh
+kubectl delete axonhub --all --all-namespaces
+```
+
+**Then uninstall the operator:**
 
 ```sh
 helm uninstall axon-operator --namespace axon-operator-system
@@ -305,8 +460,9 @@ make undeploy
 make uninstall
 ```
 
-> **Note:** Removing the operator does not delete the AxonHub instances (CRs)
-> you may have created. Remove those first if you want a full cleanup.
+> **Note:** Deleting the `AxonHub` CR triggers cleanup of the Postgres
+> StatefulSet, Service, and Secret that the operator created for that
+> instance (via owner references). External databases are not touched.
 
 ---
 
