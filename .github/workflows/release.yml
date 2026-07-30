@@ -2,6 +2,8 @@ name: Release
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*"
 
@@ -36,6 +38,7 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
+            type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
@@ -60,11 +63,13 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
 
       - name: Build installer manifest
+        if: startsWith(github.ref, 'refs/tags/')
         run: |
           make build-installer IMG=ghcr.io/${{ github.repository }}:${{ steps.meta.outputs.version }}
           cat dist/install.yaml
 
       - name: Upload release assets
+        if: startsWith(github.ref, 'refs/tags/')
         uses: softprops/action-gh-release@v2
         with:
           files: dist/install.yaml
