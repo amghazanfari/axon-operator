@@ -36,3 +36,28 @@ jobs:
 
       - name: Build Docker image
         run: make docker-build
+
+  helm-lint:
+    name: Lint Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - name: Clone the code
+        uses: actions/checkout@v4
+
+      - name: Setup Helm
+        uses: azure/setup-helm@v4
+
+      - name: Lint Helm chart
+        run: helm lint charts/axon-operator
+
+      - name: Template Helm chart (defaults)
+        run: helm template axon-operator charts/axon-operator
+
+      - name: Template Helm chart (all features enabled)
+        run: |
+          helm template axon-operator charts/axon-operator \
+            --set metrics.enabled=true \
+            --set metrics.secure=false \
+            --set networkPolicy.enabled=true \
+            --set prometheus.monitor.enabled=true \
+            --set leaderElection.enabled=false
