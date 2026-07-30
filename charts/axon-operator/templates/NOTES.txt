@@ -1,0 +1,29 @@
+AxonHub Operator has been deployed!
+
+The controller manager is running in the {{ include "axon-operator.namespace" . }} namespace.
+
+{{- if .Values.metrics.enabled }}
+
+Metrics are exposed on port {{ .Values.metrics.service.port }} via the
+{{ include "axon-operator.fullname" . }}-metrics-service service.
+{{- end }}
+
+To verify the deployment is healthy:
+
+  kubectl get pods -n {{ include "axon-operator.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }}
+
+To check the operator logs:
+
+  kubectl logs -n {{ include "axon-operator.namespace" . }} -l app.kubernetes.io/instance={{ .Release.Name }} -c manager
+
+{{- if .Values.networkPolicy.enabled }}
+A NetworkPolicy is active. Only pods in namespaces labeled `metrics: enabled`
+can scrape the metrics endpoint. Label the target namespace:
+
+  kubectl label namespace <namespace> metrics=enabled
+{{- end }}
+
+{{- if .Values.prometheus.monitor.enabled }}
+A Prometheus ServiceMonitor has been created. Ensure the Prometheus Operator is
+installed and configured to select ServiceMonitors in this namespace.
+{{- end }}

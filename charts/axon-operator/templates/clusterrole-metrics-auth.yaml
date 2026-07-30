@@ -1,0 +1,37 @@
+# ClusterRole and ClusterRoleBinding for metrics authn/authz.
+# Required when secure metrics (HTTPS) is enabled so the metrics server can
+# authenticate and authorize requests via TokenReview / SubjectAccessReview.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "axon-operator.fullname" . }}-metrics-auth-role
+  labels:
+    {{- include "axon-operator.labels" . | nindent 4 }}
+rules:
+- apiGroups:
+  - authentication.k8s.io
+  resources:
+  - tokenreviews
+  verbs:
+  - create
+- apiGroups:
+  - authorization.k8s.io
+  resources:
+  - subjectaccessreviews
+  verbs:
+  - create
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: {{ include "axon-operator.fullname" . }}-metrics-auth-rolebinding
+  labels:
+    {{- include "axon-operator.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: {{ include "axon-operator.fullname" . }}-metrics-auth-role
+subjects:
+- kind: ServiceAccount
+  name: {{ include "axon-operator.serviceAccountName" . }}
+  namespace: {{ include "axon-operator.namespace" . }}

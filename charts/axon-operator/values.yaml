@@ -1,0 +1,110 @@
+# Default values for axon-operator.
+# This is a YAML-formatted file.
+
+# -- Number of controller-manager replicas.
+replicaCount: 1
+
+image:
+  # -- Controller manager image repository.
+  repository: ghcr.io/amghazanfari/axon-operator
+  # -- Image tag. Defaults to the chart appVersion when empty.
+  tag: ""
+  # -- Image pull policy.
+  pullPolicy: IfNotPresent
+
+# -- Overrides the chart name.
+nameOverride: ""
+# -- Overrides the fully-qualified resource names.
+fullnameOverride: ""
+
+# -- Namespace where the operator is deployed.
+namespace: axon-operator-system
+
+serviceAccount:
+  # -- Specifies whether a service account should be created.
+  create: true
+  # -- Annotations to add to the service account.
+  annotations: {}
+  # -- The name of the service account to use. If not set and create is true, a name is generated.
+  name: ""
+
+# -- Image pull secrets for private registries.
+imagePullSecrets: []
+
+# -- Enable leader election for the controller manager.
+leaderElection:
+  enabled: true
+
+metrics:
+  # -- Enable the metrics endpoint.
+  enabled: true
+  # -- Serve metrics over HTTPS (secure) instead of HTTP.
+  secure: true
+  service:
+    # -- Metrics service type.
+    type: ClusterIP
+    # -- Metrics service port.
+    port: 8443
+
+# -- Pod-level security context (restricted PSS).
+podSecurityContext:
+  runAsNonRoot: true
+  seccompProfile:
+    type: RuntimeDefault
+
+# -- Container-level security context (restricted PSS).
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 128Mi
+  requests:
+    cpu: 10m
+    memory: 64Mi
+
+# -- Node labels for pod assignment.
+nodeSelector: {}
+
+# -- Tolerations for pod assignment.
+tolerations: []
+
+# -- Affinity rules for pod assignment.
+affinity: {}
+
+# -- Extra args passed to the manager binary (appended to defaults).
+extraArgs: []
+
+# -- Extra environment variables for the manager container.
+extraEnv: []
+
+# -- Extra volumes for the controller pod.
+extraVolumes: []
+
+# -- Extra volume mounts for the manager container.
+extraVolumeMounts: []
+
+# -- Extra annotations for the controller pod.
+podAnnotations: {}
+
+# -- Extra labels for the controller pod.
+podLabels: {}
+
+networkPolicy:
+  # -- Enable a NetworkPolicy that restricts metrics ingress to namespaces labeled `metrics: enabled`.
+  enabled: false
+
+prometheus:
+  monitor:
+    # -- Enable a Prometheus ServiceMonitor (requires the Prometheus Operator CRD).
+    enabled: false
+    # -- Additional labels for the ServiceMonitor.
+    additionalLabels: {}
+    # -- Scrape interval.
+    interval: 30s
+    # -- Scrape timeout.
+    scrapeTimeout: 10s

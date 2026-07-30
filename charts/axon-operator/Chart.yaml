@@ -1,0 +1,15 @@
+apiVersion: v2
+name: axon-operator
+description: Helm chart for the AxonHub Kubernetes Operator
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - axonhub
+  - operator
+  - kubernetes-operator
+home: https://github.com/amghazanfari/axon-operator
+sources:
+  - https://github.com/amghazanfari/axon-operator
+maintainers:
+  - name: amghazanfari

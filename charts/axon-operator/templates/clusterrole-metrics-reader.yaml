@@ -1,0 +1,14 @@
+# ClusterRole that grants read access to the /metrics non-resource URL.
+# Bound externally (e.g. by the kube-apiserver or Prometheus) — not bound to
+# the operator service account directly.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: {{ include "axon-operator.fullname" . }}-metrics-reader
+  labels:
+    {{- include "axon-operator.labels" . | nindent 4 }}
+rules:
+- nonResourceURLs:
+  - "/metrics"
+  verbs:
+  - get

@@ -1,0 +1,27 @@
+{{- if and .Values.metrics.enabled .Values.prometheus.monitor.enabled -}}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ include "axon-operator.fullname" . }}-metrics-monitor
+  namespace: {{ include "axon-operator.namespace" . }}
+  labels:
+    {{- include "axon-operator.labels" . | nindent 4 }}
+    {{- with .Values.prometheus.monitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+spec:
+  endpoints:
+    - path: /metrics
+      port: {{ if .Values.metrics.secure }}https{{ else }}http{{ end }}
+      {{- if .Values.metrics.secure }}
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true
+      {{- end }}
+      interval: {{ .Values.prometheus.monitor.interval }}
+      scrapeTimeout: {{ .Values.prometheus.monitor.scrapeTimeout }}
+  selector:
+    matchLabels:
+      {{- include "axon-operator.selectorLabels" . | nindent 6 }}
+{{- end -}}
