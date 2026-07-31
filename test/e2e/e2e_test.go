@@ -351,6 +351,55 @@ spec:
 				}
 				Eventually(verifyReconcileMetrics, 2*time.Minute, time.Second).Should(Succeed())
 			})
+
+			It("should reconcile without errors after applying an AxonHub CR", func() {
+				By("applying an AxonHub CR")
+				axonhubCR := fmt.Sprintf(`apiVersion: axonhub.looplj.com/v1alpha1
+kind: AxonHub
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  image: nginx:latest
+  replicas: 1
+  port: 8090
+  postgres:
+    enabled: true
+    embedded:
+      image: postgres:16
+      database: axonhub
+      user: axonhub
+      storage: 1Gi
+`, axonhubName, namespace)
+				cmd := exec.Command("kubectl", "apply", "-f", "-")
+				cmd.Stdin = strings.NewReader(axonhubCR)
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to apply AxonHub CR")
+
+				By("waiting for child resources to be created")
+				verifyResourcesCreated := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "deployment", axonhubName,
+						"-n", namespace, "-o", "jsonpath={.metadata.name}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal(axonhubName))
+				}
+				Eventually(verifyResourcesCreated, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("waiting for reconcile errors to settle")
+				time.Sleep(10 * time.Second)
+
+				By("verifying no reconcile errors in controller logs")
+				verifyNoReconcileErrors := func(g Gomega) {
+					cmd := exec.Command("kubectl", "logs", controllerPodName, "-n", namespace)
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred(), "Failed to get controller logs")
+					g.Expect(output).NotTo(ContainSubstring(
+						"Reconciler error",
+					), "Controller logs contain reconcile errors:\n%s", output)
+				}
+				Eventually(verifyNoReconcileErrors, 30*time.Second, 5*time.Second).Should(Succeed())
+			})
 		})
 
 		// +kubebuilder:scaffold:e2e-webhooks-checks

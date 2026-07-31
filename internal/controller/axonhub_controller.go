@@ -30,6 +30,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/util/retry"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -98,6 +99,9 @@ func (r *AxonHubReconciler) reconcileNormal(ctx context.Context, axonhub *axonhu
 	if !controllerutil.ContainsFinalizer(axonhub, finalizerName) {
 		controllerutil.AddFinalizer(axonhub, finalizerName)
 		if err := r.Update(ctx, axonhub); err != nil {
+			if errors.IsConflict(err) {
+				return ctrl.Result{Requeue: true}, nil
+			}
 			return ctrl.Result{}, err
 		}
 		return ctrl.Result{Requeue: true}, nil
@@ -142,7 +146,7 @@ func (r *AxonHubReconciler) reconcileNormal(ctx context.Context, axonhub *axonhu
 		r.setCondition(ctx, axonhub, conditionTypeReady, metav1.ConditionFalse, reasonReconciling, "AxonHub is not yet ready")
 	}
 
-	if err := r.Status().Update(ctx, axonhub); err != nil {
+	if err := r.updateStatus(ctx, axonhub); err != nil {
 		logger.Error(err, "Failed to update AxonHub status")
 		return ctrl.Result{}, err
 	}
@@ -152,6 +156,17 @@ func (r *AxonHubReconciler) reconcileNormal(ctx context.Context, axonhub *axonhu
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *AxonHubReconciler) updateStatus(ctx context.Context, axonhub *axonhubv1alpha1.AxonHub) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		var latest axonhubv1alpha1.AxonHub
+		if err := r.Get(ctx, types.NamespacedName{Name: axonhub.Name, Namespace: axonhub.Namespace}, &latest); err != nil {
+			return err
+		}
+		latest.Status = axonhub.Status
+		return r.Status().Update(ctx, &latest)
+	})
 }
 
 func (r *AxonHubReconciler) reconcileEmbeddedPostgres(ctx context.Context, axonhub *axonhubv1alpha1.AxonHub) (bool, error) {
@@ -249,6 +264,9 @@ func (r *AxonHubReconciler) reconcileDelete(ctx context.Context, axonhub *axonhu
 
 	controllerutil.RemoveFinalizer(axonhub, finalizerName)
 	if err := r.Update(ctx, axonhub); err != nil {
+		if errors.IsConflict(err) {
+			return ctrl.Result{Requeue: true}, nil
+		}
 		return ctrl.Result{}, err
 	}
 	return ctrl.Result{}, nil
