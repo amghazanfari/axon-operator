@@ -164,6 +164,9 @@ func (r *AxonHubReconciler) updateStatus(ctx context.Context, axonhub *axonhubv1
 		if err := r.Get(ctx, types.NamespacedName{Name: axonhub.Name, Namespace: axonhub.Namespace}, &latest); err != nil {
 			return err
 		}
+		if reflect.DeepEqual(latest.Status, axonhub.Status) {
+			return nil
+		}
 		latest.Status = axonhub.Status
 		return r.Status().Update(ctx, &latest)
 	})
