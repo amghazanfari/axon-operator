@@ -267,33 +267,50 @@ func (r *AxonHubReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 		return r.Create(ctx, obj)
 	}
 
+	changed := false
+
 	if !reflect.DeepEqual(obj.GetLabels(), current.GetLabels()) {
 		current.SetLabels(obj.GetLabels())
+		changed = true
 	}
 
-	// For spec updates, use Update since createOrUpdate with merge patch is complex for typed objects
 	switch desired := obj.(type) {
 	case *corev1.Service:
 		currentSvc := current.(*corev1.Service)
 		desired.Spec.ClusterIP = currentSvc.Spec.ClusterIP
 		if !reflect.DeepEqual(desired.Spec, currentSvc.Spec) {
 			currentSvc.Spec = desired.Spec
-			return r.Update(ctx, currentSvc)
+			changed = true
 		}
 	case *appsv1.Deployment:
 		currentDep := current.(*appsv1.Deployment)
-		currentDep.Spec = desired.Spec
-		return r.Update(ctx, currentDep)
+		if !reflect.DeepEqual(desired.Spec, currentDep.Spec) {
+			currentDep.Spec = desired.Spec
+			changed = true
+		}
 	case *appsv1.StatefulSet:
 		currentSts := current.(*appsv1.StatefulSet)
-		currentSts.Spec = desired.Spec
-		return r.Update(ctx, currentSts)
+		if !reflect.DeepEqual(desired.Spec, currentSts.Spec) {
+			currentSts.Spec = desired.Spec
+			changed = true
+		}
 	case *corev1.Secret:
 		currentSec := current.(*corev1.Secret)
 		if !reflect.DeepEqual(desired.StringData, currentSec.StringData) {
 			currentSec.StringData = desired.StringData
-			return r.Update(ctx, currentSec)
+			changed = true
 		}
+	}
+
+	if !changed {
+		return nil
+	}
+
+	if err := r.Update(ctx, current); err != nil {
+		if errors.IsConflict(err) {
+			return nil
+		}
+		return err
 	}
 
 	return nil
