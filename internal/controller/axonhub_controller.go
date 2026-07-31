@@ -98,6 +98,7 @@ func (r *AxonHubReconciler) reconcileNormal(ctx context.Context, axonhub *axonhu
 
 	if !controllerutil.ContainsFinalizer(axonhub, finalizerName) {
 		controllerutil.AddFinalizer(axonhub, finalizerName)
+		logger.Info("Adding finalizer", "name", finalizerName)
 		if err := r.Update(ctx, axonhub); err != nil {
 			if errors.IsConflict(err) {
 				return ctrl.Result{Requeue: true}, nil
@@ -227,6 +228,8 @@ func (r *AxonHubReconciler) reconcilePgSecret(ctx context.Context, axonhub *axon
 	if err := controllerutil.SetControllerReference(axonhub, secret, r.Scheme); err != nil {
 		return err
 	}
+	logger := log.FromContext(ctx)
+	logger.Info("Creating resource", "kind", "Secret", "name", secret.Name)
 	return r.Create(ctx, secret)
 }
 
@@ -266,6 +269,7 @@ func (r *AxonHubReconciler) reconcileDelete(ctx context.Context, axonhub *axonhu
 	logger.Info("Deleting AxonHub, cleaning up")
 
 	controllerutil.RemoveFinalizer(axonhub, finalizerName)
+	logger.Info("Removing finalizer", "name", finalizerName)
 	if err := r.Update(ctx, axonhub); err != nil {
 		if errors.IsConflict(err) {
 			return ctrl.Result{Requeue: true}, nil
@@ -276,6 +280,7 @@ func (r *AxonHubReconciler) reconcileDelete(ctx context.Context, axonhub *axonhu
 }
 
 func (r *AxonHubReconciler) createOrUpdate(ctx context.Context, obj client.Object) error {
+	logger := log.FromContext(ctx)
 	key := types.NamespacedName{Name: obj.GetName(), Namespace: obj.GetNamespace()}
 
 	current := obj.DeepCopyObject().(client.Object)
@@ -285,6 +290,7 @@ func (r *AxonHubReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 	}
 
 	if errors.IsNotFound(err) {
+		logger.Info("Creating resource", "kind", fmt.Sprintf("%T", obj), "name", obj.GetName())
 		return r.Create(ctx, obj)
 	}
 
@@ -327,6 +333,7 @@ func (r *AxonHubReconciler) createOrUpdate(ctx context.Context, obj client.Objec
 		return nil
 	}
 
+	logger.Info("Updating resource", "kind", fmt.Sprintf("%T", current), "name", current.GetName())
 	if err := r.Update(ctx, current); err != nil {
 		if errors.IsConflict(err) {
 			return nil
