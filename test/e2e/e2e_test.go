@@ -22,6 +22,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"time"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -256,16 +257,103 @@ var _ = Describe("Manager", Ordered, func() {
 			))
 		})
 
-		// +kubebuilder:scaffold:e2e-webhooks-checks
+		Context("AxonHub reconciliation", func() {
+			const axonhubName = "test-axonhub"
 
-		// TODO: Customize the e2e test suite with scenarios specific to your project.
-		// Consider applying sample/CR(s) and check their status and/or verifying
-		// the reconciliation by using the metrics, i.e.:
-		// metricsOutput := getMetricsOutput()
-		// Expect(metricsOutput).To(ContainSubstring(
-		//    fmt.Sprintf(`controller_runtime_reconcile_total{controller="%s",result="success"} 1`,
-		//    strings.ToLower(<Kind>),
-		// ))
+			AfterEach(func() {
+				By("cleaning up the AxonHub CR")
+				cmd := exec.Command("kubectl", "delete", "axonhub", axonhubName, "-n", namespace, "--ignore-not-found=true")
+				_, _ = utils.Run(cmd)
+			})
+
+			It("should create child resources when an AxonHub CR is applied", func() {
+				By("applying an AxonHub CR")
+				axonhubCR := fmt.Sprintf(`apiVersion: axonhub.looplj.com/v1alpha1
+kind: AxonHub
+metadata:
+  name: %s
+  namespace: %s
+spec:
+  image: nginx:latest
+  replicas: 1
+  port: 8090
+  postgres:
+    enabled: true
+    embedded:
+      image: postgres:16
+      database: axonhub
+      user: axonhub
+      storage: 1Gi
+`, axonhubName, namespace)
+				cmd := exec.Command("kubectl", "apply", "-f", "-")
+				cmd.Stdin = strings.NewReader(axonhubCR)
+				_, err := utils.Run(cmd)
+				Expect(err).NotTo(HaveOccurred(), "Failed to apply AxonHub CR")
+
+				By("verifying the AxonHub Deployment is created")
+				verifyDeployment := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "deployment", axonhubName,
+						"-n", namespace, "-o", "jsonpath={.metadata.name}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal(axonhubName), "AxonHub Deployment was not created")
+				}
+				Eventually(verifyDeployment, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("verifying the AxonHub Service is created")
+				verifyService := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "service", axonhubName,
+						"-n", namespace, "-o", "jsonpath={.metadata.name}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal(axonhubName), "AxonHub Service was not created")
+				}
+				Eventually(verifyService, 2*time.Minute, time.Second).Should(Succeed())
+
+				pgStsName := axonhubName + "-postgres"
+				By("verifying the Postgres StatefulSet is created")
+				verifyStatefulSet := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "statefulset", pgStsName,
+						"-n", namespace, "-o", "jsonpath={.metadata.name}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal(pgStsName), "Postgres StatefulSet was not created")
+				}
+				Eventually(verifyStatefulSet, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("verifying the Postgres Service is created")
+				verifyPgService := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "service", pgStsName,
+						"-n", namespace, "-o", "jsonpath={.metadata.name}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal(pgStsName), "Postgres Service was not created")
+				}
+				Eventually(verifyPgService, 2*time.Minute, time.Second).Should(Succeed())
+
+				pgSecretName := axonhubName + "-pg-password"
+				By("verifying the Postgres password Secret is created")
+				verifyPgSecret := func(g Gomega) {
+					cmd := exec.Command("kubectl", "get", "secret", pgSecretName,
+						"-n", namespace, "-o", "jsonpath={.metadata.name}")
+					output, err := utils.Run(cmd)
+					g.Expect(err).NotTo(HaveOccurred())
+					g.Expect(output).To(Equal(pgSecretName), "Postgres password Secret was not created")
+				}
+				Eventually(verifyPgSecret, 2*time.Minute, time.Second).Should(Succeed())
+
+				By("verifying that reconcile metrics are produced")
+				verifyReconcileMetrics := func(g Gomega) {
+					metricsOutput := getMetricsOutput()
+					g.Expect(metricsOutput).To(ContainSubstring(
+						`controller_runtime_reconcile_total{controller="axonhub"`,
+					))
+				}
+				Eventually(verifyReconcileMetrics, 2*time.Minute, time.Second).Should(Succeed())
+			})
+		})
+
+		// +kubebuilder:scaffold:e2e-webhooks-checks
 	})
 })
 

@@ -38,7 +38,7 @@ var _ = Describe("AxonHub Controller", func() {
 
 		typeNamespacedName := types.NamespacedName{
 			Name:      resourceName,
-			Namespace: "default", // TODO(user):Modify as needed
+			Namespace: "default",
 		}
 		axonhub := &axonhubv1alpha1.AxonHub{}
 
@@ -51,14 +51,26 @@ var _ = Describe("AxonHub Controller", func() {
 						Name:      resourceName,
 						Namespace: "default",
 					},
-					// TODO(user): Specify other spec details if needed.
+					Spec: axonhubv1alpha1.AxonHubSpec{
+						Image:    "ghcr.io/looplj/axonhub:latest",
+						Replicas: ptr(int32(1)),
+						Port:     8090,
+						Postgres: axonhubv1alpha1.PostgresConfig{
+							Enabled: ptr(true),
+							Embedded: &axonhubv1alpha1.EmbeddedPostgres{
+								Image:    "postgres:16",
+								Database: "axonhub",
+								User:     "axonhub",
+								Storage:  "1Gi",
+							},
+						},
+					},
 				}
 				Expect(k8sClient.Create(ctx, resource)).To(Succeed())
 			}
 		})
 
 		AfterEach(func() {
-			// TODO(user): Cleanup logic after each test, like removing the resource instance.
 			resource := &axonhubv1alpha1.AxonHub{}
 			err := k8sClient.Get(ctx, typeNamespacedName, resource)
 			Expect(err).NotTo(HaveOccurred())
@@ -77,8 +89,10 @@ var _ = Describe("AxonHub Controller", func() {
 				NamespacedName: typeNamespacedName,
 			})
 			Expect(err).NotTo(HaveOccurred())
-			// TODO(user): Add more specific assertions depending on your controller's reconciliation logic.
-			// Example: If you expect a certain status condition after reconciliation, verify it here.
 		})
 	})
 })
+
+func ptr[T any](v T) *T {
+	return &v
+}
