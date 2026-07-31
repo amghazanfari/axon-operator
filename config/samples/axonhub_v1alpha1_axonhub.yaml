@@ -6,7 +6,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
   name: axonhub-sample
 spec:
-  image: ghcr.io/looplj/axonhub:latest
+  image: looplj/axonhub:latest
   replicas: 1
   port: 8090
   postgres:

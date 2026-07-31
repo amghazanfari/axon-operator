@@ -224,7 +224,7 @@ metadata:
   name: my-axonhub
   namespace: default
 spec:
-  image: ghcr.io/looplj/axonhub:latest
+  image: looplj/axonhub:latest
   replicas: 1
   port: 8090
   postgres:
@@ -271,7 +271,7 @@ metadata:
   name: my-axonhub
   namespace: default
 spec:
-  image: ghcr.io/looplj/axonhub:latest
+  image: looplj/axonhub:latest
   replicas: 1
   port: 8090
   postgres:

@@ -52,7 +52,7 @@ var _ = Describe("AxonHub Controller", func() {
 						Namespace: "default",
 					},
 					Spec: axonhubv1alpha1.AxonHubSpec{
-						Image:    "ghcr.io/looplj/axonhub:latest",
+						Image:    "looplj/axonhub:latest",
 						Replicas: ptr(int32(1)),
 						Port:     8090,
 						Postgres: axonhubv1alpha1.PostgresConfig{
